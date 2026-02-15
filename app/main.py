@@ -1,0 +1,55 @@
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.orm import Session
+from passlib.context import CryptContext
+
+from .database import engine, SessionLocal
+from .models import Base, User
+from .schemas import UserCreate, UserLogin
+
+app = FastAPI()
+
+Base.metadata.create_all(bind=engine)
+
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+
+# Dependency to get DB session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@app.post("/signup")
+def signup(user: UserCreate, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.username == user.username).first()
+
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    hashed_password = pwd_context.hash(user.password)
+
+    new_user = User(
+        username=user.username,
+        hashed_password=hashed_password
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return {"message": "User created successfully"}
+
+
+@app.post("/signin")
+def signin(user: UserLogin, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.username == user.username).first()
+
+    if not db_user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not pwd_context.verify(user.password, db_user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    return {"message": "Login successful"}
