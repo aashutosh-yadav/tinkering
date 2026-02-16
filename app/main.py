@@ -90,3 +90,7 @@ def signin(user: UserLogin, db: Session = Depends(get_db)):
         "access_token": access_token,
         "token_type": "bearer"
     }
+
+@app.get("/me")
+def read_current_user(current_user: str = Depends(get_current_user)):
+    return {"user": current_user}
